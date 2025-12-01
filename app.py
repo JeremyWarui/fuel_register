@@ -22,8 +22,8 @@ if not os.path.exists(DATA_FILE):
 # --- Page Configuration ---
 st.set_page_config(page_title="Fuel Register", page_icon="⛽", layout="wide")
 
-# --- Global CSS Styling ---
-st.markdown(f"""
+# --- Global CSS Styling moved to st.html ---
+st.html(f"""
 <style>
 /* General App Styling */
 div[data-testid="stApp"] * {{
@@ -78,7 +78,8 @@ img {{
 .stForm [data-testid="InputInstructions"] {{
     display: none !important;
 }}
-/* Preview boxes for live input confirmation */
+
+/* Preview boxes */
 .preview-box {{
     padding: 0.5rem 0.75rem;
     border-radius: 8px;
@@ -90,13 +91,10 @@ img {{
 .preview-success {{ background: #e6ffed; color: #05612a; }}
 .preview-warning {{ background: #fff4e5; color: #8a4b00; }}
 </style>
-""", unsafe_allow_html=True)
+""")
 
 def render_preview(label: str, value, variant: str = "info"):
-    """Render a small, safe HTML preview box for `value`.
-
-    Escapes user input to avoid XSS and avoids Streamlit's markdown parser.
-    """
+    """Render a safe HTML preview box."""
     safe_label = escape(str(label))
     safe_value = escape("" if value is None else str(value))
     cls = "preview-info"
@@ -111,21 +109,18 @@ def render_preview(label: str, value, variant: str = "info"):
 # --- Title ---
 st.title("Fuel Register")
 
-# Check if submission was just completed
+# Check submission flag
 if "submission_complete" in st.session_state and st.session_state.submission_complete:
     st.subheader("✅ Submitted Successfully!")
-    st.write("")
     st.write("Your fuel entry has been recorded.")
-    st.write("")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("📝 Submit Another Receipt", type="primary", use_container_width=True):
-            # Clear the submission flag and rerun
             st.session_state.submission_complete = False
             st.rerun()
     
-    st.stop()  # Stop rendering the rest of the page
+    st.stop()
 
 # --- Add Fuel Entry ---
 st.header("Add Fuel Entry")
@@ -135,66 +130,51 @@ col1, col2 = st.columns(2)
 with col1:
     driver_name = st.text_input("Driver's Name [Full Name] *", key="driver_name")
     if driver_name:
-        render_preview("Driver", driver_name, "info")
-    
-    date_value = st.date_input(
-        "Date of Receipt *", value=datetime.today().date(), key="date_value")
-    render_preview("Date", date_value.strftime('%B %d, %Y'), "info")
-    
-    receipt_no = st.text_input(
-        "Receipt No *", placeholder="Enter receipt number", key="receipt_no")
+        render_preview("Driver", driver_name)
+
+    date_value = st.date_input("Date of Receipt *", value=datetime.today().date(), key="date_value")
+    render_preview("Date", date_value.strftime('%B %d, %Y'))
+
+    receipt_no = st.text_input("Receipt No *", placeholder="Enter receipt number", key="receipt_no")
     if receipt_no:
-        render_preview("Receipt No", receipt_no, "info")
-    
+        render_preview("Receipt No", receipt_no)
+
     product = st.selectbox("Product *", ["Select product"] + PRODUCTS, key="product")
-    
-    # Immediate visual feedback for product selection
     if product != "Select product":
         render_preview("Product", product, "success")
-    
+
     quantity = st.number_input("Quantity (Litres)", min_value=0, key="quantity")
     if quantity > 0:
-        render_preview("Quantity", f"{quantity} litres", "info")
+        render_preview("Quantity", f"{quantity} litres")
 
 with col2:
-    vehicle_options = [
-        "Select Vehicle Reg Number..." ] + registration_numbers
+    vehicle_options = ["Select Vehicle Reg Number..."] + registration_numbers
     motor_vehicle = st.selectbox("Vehicle Reg No *", vehicle_options, key="motor_vehicle")
-    
-    # Immediate visual feedback for vehicle selection
     if not motor_vehicle.startswith("Select"):
         render_preview("Vehicle", motor_vehicle, "success")
-    
+
     amount = st.number_input("Amount (Currency) *", min_value=0, key="amount")
     if amount > 0:
-        render_preview("Amount", f"{amount:,.2f}", "info")
-    
+        render_preview("Amount", f"{amount:,.2f}")
+
     previous_km = st.number_input("Previous Kilometers", min_value=0, key="previous_km")
     if previous_km > 0:
-        render_preview("Start", f"{previous_km:,} km", "info")
-    
+        render_preview("Start", f"{previous_km:,} km")
+
     current_km = st.number_input("Current Kilometers", min_value=0, key="current_km")
     if current_km > 0:
-        render_preview("End", f"{current_km:,} km", "info")
-    
-    # Inline validation for kilometers
+        render_preview("End", f"{current_km:,} km")
+
     if previous_km > 0 and current_km > 0:
         if current_km < previous_km:
             st.error("⚠️ Current km must be greater than previous km")
-        elif current_km > previous_km:
-                distance_preview = current_km - previous_km
-                render_preview("Distance", f"{distance_preview} km", "success")
-    
-    receipt_image = st.file_uploader(
-        "Upload Receipt Image",
-        type=["png", "jpg", "jpeg", "pdf"],
-        help="Upload a clear picture or PDF of the fuel receipt.",
-        key="receipt_image"
-    )
-    if receipt_image:
-        render_preview("Receipt Image", receipt_image.name, "info")
+        else:
+            render_preview("Distance", f"{current_km - previous_km} km", "success")
 
-# Submit button outside form for immediate feedback
+    receipt_image = st.file_uploader("Upload Receipt Image", type=["png", "jpg", "jpeg", "pdf"], key="receipt_image")
+    if receipt_image:
+        render_preview("Receipt Image", receipt_image.name)
+
 col_btn1, col_btn2 = st.columns([3, 1])
 with col_btn2:
     submit = st.button("Add Entry", type="primary", use_container_width=True)
@@ -211,44 +191,36 @@ if submit:
     if not receipt_no:
         errors.append("Receipt number is required.")
     if current_km < previous_km:
-        errors.append(
-            "Current kilometers cannot be less than previous kilometers.")
+        errors.append("Current kilometers cannot be less than previous kilometers.")
 
     if errors:
         for err in errors:
             st.error(f"⚠️ {err}")
     else:
         distance = current_km - previous_km
-        
-        # Show confirmation dialog
+
         @st.dialog("⚠️ Confirm Entry Details")
         def confirm_submission():
-            st.write("Please review your entry before submitting:")
-            st.write("")
-            render_preview("Driver", driver_name, "info")
-            render_preview("Date", date_value.strftime('%B %d, %Y'), "info")
-            render_preview("Receipt No", receipt_no, "info")
+            st.write("Review before submitting:")
+            render_preview("Driver", driver_name)
+            render_preview("Date", date_value.strftime('%B %d, %Y'))
+            render_preview("Receipt No", receipt_no)
             render_preview("Vehicle", motor_vehicle, "success")
             render_preview("Product", product, "success")
-            render_preview("Quantity", f"{quantity} litres", "info")
-            render_preview("Amount", f"{amount:,.2f}", "info")
-            render_preview("Distance", f"{distance} km (from {previous_km:,} to {current_km:,} km)", "success")
+            render_preview("Quantity", f"{quantity} litres")
+            render_preview("Amount", f"{amount:,.2f}")
+            render_preview("Distance", f"{distance} km", "success")
             if receipt_image:
-                render_preview("Receipt Image", receipt_image.name, "info")
-            
-            st.write("")
-            st.warning("Are all details accurate?")
-            
+                render_preview("Receipt Image", receipt_image.name)
+
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✓ Confirm & Submit", type="primary", use_container_width=True):
-                    # Save the entry
+
                     image_path = ""
                     if receipt_image:
                         os.makedirs("receipts", exist_ok=True)
-                        image_path = os.path.join(
-                            "receipts", f"{receipt_no}_{receipt_image.name}"
-                        )
+                        image_path = os.path.join("receipts", f"{receipt_no}_{receipt_image.name}")
                         with open(image_path, "wb") as f:
                             f.write(receipt_image.getbuffer())
 
@@ -269,14 +241,14 @@ if submit:
                     df = pd.read_csv(DATA_FILE)
                     df = pd.concat([df, new_row], ignore_index=True)
                     df.to_csv(DATA_FILE, index=False)
-                    
+
                     st.session_state.submission_complete = True
                     st.rerun()
-            
+
             with col2:
                 if st.button("✗ Cancel", use_container_width=True):
                     st.rerun()
-        
+
         confirm_submission()
 
 # --- Entries Viewer ---
@@ -287,22 +259,19 @@ st.header(f"Fuel Entries ({total_entries} total)")
 
 display_columns = ["Receipt No", "Registration No", "Driver Name", "Date"]
 
-# Filter Area
 col_filter, col_clear = st.columns([4, 1])
 with col_filter:
     driver_filter = st.text_input("🔍 Filter by Driver Name:", placeholder="Type driver name...")
 with col_clear:
     if driver_filter:
-        st.write("")
-        st.write("")
         if st.button("Clear", use_container_width=True):
             st.rerun()
 
 if driver_filter:
     filtered = df[df["Driver Name"].str.contains(driver_filter, case=False, na=False)]
     st.caption(f"Showing {len(filtered)} of {total_entries} entries")
-    st.dataframe(filtered[display_columns].sort_values(
-        "Date", ascending=False), hide_index=True, use_container_width=True)
+    st.dataframe(filtered[display_columns].sort_values("Date", ascending=False),
+                 hide_index=True, use_container_width=True)
 else:
-    st.dataframe(df[display_columns].sort_values(
-        "Date", ascending=False), hide_index=True, use_container_width=True)
+    st.dataframe(df[display_columns].sort_values("Date", ascending=False),
+                 hide_index=True, use_container_width=True)
