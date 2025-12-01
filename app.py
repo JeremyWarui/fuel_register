@@ -122,7 +122,7 @@ if "submission_complete" in st.session_state and st.session_state.submission_com
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("📝 Submit Another Receipt", type="primary", use_container_width=True):
+        if st.button("📝 Submit Another Receipt", type="primary", width='stretch'):
             st.session_state.submission_complete = False
             st.rerun()
     
@@ -181,9 +181,10 @@ with col2:
     if receipt_image:
         render_preview("Receipt Image", receipt_image.name)
 
+
 col_btn1, col_btn2 = st.columns([3, 1])
 with col_btn2:
-    submit = st.button("Add Entry", type="primary", use_container_width=True)
+    submit = st.button("Add Entry", type="primary", width='stretch')
 
 if submit:
     errors = []
@@ -221,7 +222,7 @@ if submit:
 
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✓ Confirm & Submit", type="primary", use_container_width=True):
+                if st.button("✓ Confirm & Submit", type="primary", width='stretch'):
 
                     image_path = ""
                     if receipt_image:
@@ -252,7 +253,7 @@ if submit:
                     st.rerun()
 
             with col2:
-                if st.button("✗ Cancel", use_container_width=True):
+                if st.button("✗ Cancel", width='stretch'):
                     st.rerun()
 
         confirm_submission()
@@ -270,14 +271,14 @@ with col_filter:
     driver_filter = st.text_input("🔍 Filter by Driver Name:", placeholder="Type driver name...")
 with col_clear:
     if driver_filter:
-        if st.button("Clear", use_container_width=True):
+        if st.button("Clear", width='stretch'):
             st.rerun()
 
 if driver_filter:
     filtered = df[df["Driver Name"].str.contains(driver_filter, case=False, na=False)]
     st.caption(f"Showing {len(filtered)} of {total_entries} entries")
     st.dataframe(filtered[display_columns].sort_values("Date", ascending=False),
-                 hide_index=True, use_container_width=True)
+                 hide_index=True, width='stretch')
 else:
     st.dataframe(df[display_columns].sort_values("Date", ascending=False),
-                 hide_index=True, use_container_width=True)
+                 hide_index=True, width='stretch')
