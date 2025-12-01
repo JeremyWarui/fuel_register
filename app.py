@@ -70,6 +70,7 @@ button[kind="primary"] {{
     background-color: #005bbb;
     color: white;
     border-radius: 10px;
+    border: none;
 }}
 
 /* Preview boxes - Simplified */
