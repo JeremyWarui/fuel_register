@@ -22,39 +22,40 @@ if not os.path.exists(DATA_FILE):
 # --- Page Configuration ---
 st.set_page_config(page_title="Fuel Register", page_icon="⛽", layout="wide")
 
-# --- Global CSS Styling moved to st.html ---
-st.html(f"""
+# --- Global CSS Styling - Simplified for Mobile Compatibility ---
+st.markdown(f"""
 <style>
-/* General App Styling */
-div[data-testid="stApp"] * {{
-    font-size: {FONT_SIZE}px !important;
-    box-sizing: border-box;
+/* General App Styling - Simplified */
+body {{
+    font-size: {FONT_SIZE}px;
 }}
 
-/* Title Styling */
-div[data-testid="stApp"] h1 {{
-    font-size: clamp(32px, 6vw, {FONT_SIZE_TITLE}px) !important;
-    font-weight: 900 !important;
+/* Title Styling - Using max() instead of clamp() */
+h1 {{
+    font-size: max(32px, {FONT_SIZE_TITLE}px);
+    font-weight: 900;
     margin-bottom: 0.3rem;
 }}
 
-/* Polished Section Headers */
+/* Section Headers */
 h2, h3 {{
-    font-weight: 800 !important;
+    font-weight: 800;
     padding-top: 1rem;
 }}
 
-/* Table improvements */
-.stDataFrame [data-testid="stTable"] td, 
-.stDataFrame [data-testid="stTable"] th {{
-    font-size: {FONT_SIZE - 2}px !important;
-    white-space: nowrap;
-    padding: 6px 10px !important;
+/* Table styling */
+table {{
+    font-size: {FONT_SIZE - 2}px;
+    width: 100%;
 }}
 
-/* File uploader and labels */
+td, th {{
+    padding: 6px 10px;
+}}
+
+/* Labels */
 label {{
-    font-weight: 900 !important;
+    font-weight: 900;
 }}
 
 /* Responsive Images */
@@ -64,46 +65,51 @@ img {{
     display: block;
 }}
 
-/* Primary Button Coloring */
-.stForm button[kind="primaryFormSubmit"] {{
-    background-color: #005bbb !important;
-    color: white !important;
+/* Button Styling */
+button[kind="primary"] {{
+    background-color: #005bbb;
+    color: white;
     border-radius: 10px;
 }}
-.stForm button[kind="primaryFormSubmit"]:hover {{
-    background-color: #004999 !important;
-}}
 
-/* Hide "Press Enter to submit form" instructions */
-.stForm [data-testid="InputInstructions"] {{
-    display: none !important;
-}}
-
-/* Preview boxes */
+/* Preview boxes - Simplified */
 .preview-box {{
-    padding: 0.5rem 0.75rem;
+    padding: 8px 12px;
     border-radius: 8px;
-    margin: 0.45rem 0 0.75rem 0;
-    font-size: 0.95rem;
-    line-height: 1.25;
+    margin: 8px 0 12px 0;
+    font-size: 16px;
+    line-height: 1.4;
 }}
-.preview-info {{ background: #e8f4ff; color: #0747a6; }}
-.preview-success {{ background: #e6ffed; color: #05612a; }}
-.preview-warning {{ background: #fff4e5; color: #8a4b00; }}
+.preview-info {{ 
+    background-color: #e8f4ff; 
+    color: #0747a6; 
+}}
+.preview-success {{ 
+    background-color: #e6ffed; 
+    color: #05612a; 
+}}
+.preview-warning {{ 
+    background-color: #fff4e5; 
+    color: #8a4b00; 
+}}
 </style>
-""")
+""", unsafe_allow_html=True)
 
 def render_preview(label: str, value, variant: str = "info"):
-    """Render a safe HTML preview box."""
+    """Render a simple preview box - simplified for mobile compatibility."""
+    # Escape special characters
     safe_label = escape(str(label))
     safe_value = escape("" if value is None else str(value))
+    
+    # Determine CSS class
     cls = "preview-info"
     if variant == "success":
         cls = "preview-success"
     elif variant == "warning":
         cls = "preview-warning"
-
-    html = f"<div class='preview-box {cls}'><strong>{safe_label}</strong>: {safe_value}</div>"
+    
+    # Simple HTML structure
+    html = f'<div class="preview-box {cls}"><strong>{safe_label}</strong>: {safe_value}</div>'
     st.markdown(html, unsafe_allow_html=True)
 
 # --- Title ---
