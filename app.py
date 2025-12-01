@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+from html import escape
 from vehicles import registration_numbers
 
 # --- Constants ---
@@ -77,15 +78,42 @@ img {{
 .stForm [data-testid="InputInstructions"] {{
     display: none !important;
 }}
+/* Preview boxes for live input confirmation */
+.preview-box {{
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    margin: 0.45rem 0 0.75rem 0;
+    font-size: 0.95rem;
+    line-height: 1.25;
+}}
+.preview-info {{ background: #e8f4ff; color: #0747a6; }}
+.preview-success {{ background: #e6ffed; color: #05612a; }}
+.preview-warning {{ background: #fff4e5; color: #8a4b00; }}
 </style>
 """, unsafe_allow_html=True)
+
+def render_preview(label: str, value, variant: str = "info"):
+    """Render a small, safe HTML preview box for `value`.
+
+    Escapes user input to avoid XSS and avoids Streamlit's markdown parser.
+    """
+    safe_label = escape(str(label))
+    safe_value = escape("" if value is None else str(value))
+    cls = "preview-info"
+    if variant == "success":
+        cls = "preview-success"
+    elif variant == "warning":
+        cls = "preview-warning"
+
+    html = f"<div class='preview-box {cls}'><strong>{safe_label}</strong>: {safe_value}</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
 # --- Title ---
 st.title("Fuel Register")
 
 # Check if submission was just completed
 if "submission_complete" in st.session_state and st.session_state.submission_complete:
-    st.success("## ✅ Submitted Successfully!")
+    st.subheader("✅ Submitted Successfully!")
     st.write("")
     st.write("Your fuel entry has been recorded.")
     st.write("")
@@ -107,26 +135,26 @@ col1, col2 = st.columns(2)
 with col1:
     driver_name = st.text_input("Driver's Name [Full Name] *", key="driver_name")
     if driver_name:
-        st.info(f"👤 {driver_name}")
+        render_preview("Driver", driver_name, "info")
     
     date_value = st.date_input(
         "Date of Receipt *", value=datetime.today().date(), key="date_value")
-    st.info(f"📅 {date_value.strftime('%B %d, %Y')}")
+    render_preview("Date", date_value.strftime('%B %d, %Y'), "info")
     
     receipt_no = st.text_input(
         "Receipt No *", placeholder="Enter receipt number", key="receipt_no")
     if receipt_no:
-        st.info(f"🧾 Receipt #{receipt_no}")
+        render_preview("Receipt No", receipt_no, "info")
     
     product = st.selectbox("Product *", ["Select product"] + PRODUCTS, key="product")
     
     # Immediate visual feedback for product selection
     if product != "Select product":
-        st.success(f"✓ {product}")
+        render_preview("Product", product, "success")
     
     quantity = st.number_input("Quantity (Litres)", min_value=0, key="quantity")
     if quantity > 0:
-        st.info(f"⛽ {quantity} litres")
+        render_preview("Quantity", f"{quantity} litres", "info")
 
 with col2:
     vehicle_options = [
@@ -135,27 +163,27 @@ with col2:
     
     # Immediate visual feedback for vehicle selection
     if not motor_vehicle.startswith("Select"):
-        st.success(f"✓ {motor_vehicle}")
+        render_preview("Vehicle", motor_vehicle, "success")
     
     amount = st.number_input("Amount (Currency) *", min_value=0, key="amount")
     if amount > 0:
-        st.info(f"💰 {amount:,.2f}")
+        render_preview("Amount", f"{amount:,.2f}", "info")
     
     previous_km = st.number_input("Previous Kilometers", min_value=0, key="previous_km")
     if previous_km > 0:
-        st.info(f"📍 Start: {previous_km:,} km")
+        render_preview("Start", f"{previous_km:,} km", "info")
     
     current_km = st.number_input("Current Kilometers", min_value=0, key="current_km")
     if current_km > 0:
-        st.info(f"📍 End: {current_km:,} km")
+        render_preview("End", f"{current_km:,} km", "info")
     
     # Inline validation for kilometers
     if previous_km > 0 and current_km > 0:
         if current_km < previous_km:
             st.error("⚠️ Current km must be greater than previous km")
         elif current_km > previous_km:
-            distance_preview = current_km - previous_km
-            st.info(f"📏 Distance: {distance_preview} km")
+                distance_preview = current_km - previous_km
+                render_preview("Distance", f"{distance_preview} km", "success")
     
     receipt_image = st.file_uploader(
         "Upload Receipt Image",
@@ -164,7 +192,7 @@ with col2:
         key="receipt_image"
     )
     if receipt_image:
-        st.info(f"📎 {receipt_image.name}")
+        render_preview("Receipt Image", receipt_image.name, "info")
 
 # Submit button outside form for immediate feedback
 col_btn1, col_btn2 = st.columns([3, 1])
@@ -197,16 +225,16 @@ if submit:
         def confirm_submission():
             st.write("Please review your entry before submitting:")
             st.write("")
-            st.info(f"**Driver:** {driver_name}")
-            st.info(f"**Date:** {date_value.strftime('%B %d, %Y')}")
-            st.info(f"**Receipt No:** {receipt_no}")
-            st.info(f"**Vehicle:** {motor_vehicle}")
-            st.info(f"**Product:** {product}")
-            st.info(f"**Quantity:** {quantity} litres")
-            st.info(f"**Amount:** {amount:,.2f}")
-            st.info(f"**Distance:** {distance} km (from {previous_km:,} to {current_km:,} km)")
+            render_preview("Driver", driver_name, "info")
+            render_preview("Date", date_value.strftime('%B %d, %Y'), "info")
+            render_preview("Receipt No", receipt_no, "info")
+            render_preview("Vehicle", motor_vehicle, "success")
+            render_preview("Product", product, "success")
+            render_preview("Quantity", f"{quantity} litres", "info")
+            render_preview("Amount", f"{amount:,.2f}", "info")
+            render_preview("Distance", f"{distance} km (from {previous_km:,} to {current_km:,} km)", "success")
             if receipt_image:
-                st.info(f"**Receipt Image:** {receipt_image.name}")
+                render_preview("Receipt Image", receipt_image.name, "info")
             
             st.write("")
             st.warning("Are all details accurate?")
