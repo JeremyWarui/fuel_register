@@ -57,3 +57,4 @@ fuel_register.csv
 .env
 .env.*
 app1.py
+.streamlit/secrets.toml

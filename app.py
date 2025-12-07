@@ -4,20 +4,18 @@ from datetime import datetime
 import os
 from html import escape
 from vehicles import registration_numbers
+from drivers import drivers
+from db_config import (
+    insert_fuel_entry, 
+    get_all_fuel_entries, 
+    filter_entries_by_driver,
+    get_entry_count
+)
 
 # --- Constants ---
-DATA_FILE = "fuel_register.csv"
 PRODUCTS = ["Diesel", "Premium", "Lubricants", "Puncture"]
 FONT_SIZE = 18
 FONT_SIZE_TITLE = 50
-
-# --- Initialize CSV ---
-if not os.path.exists(DATA_FILE):
-    df_init = pd.DataFrame(columns=[
-        "Driver Name", "Date", "Receipt No", "Registration No", "Product", "Quantity", "Amount",
-        "Previous Km", "Current Km", "Distance"
-    ])
-    df_init.to_csv(DATA_FILE, index=False)
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Fuel Register", page_icon="⛽", layout="wide")
@@ -117,16 +115,28 @@ def render_preview(label: str, value, variant: str = "info"):
 st.title("Fuel Register")
 
 # Check submission flag
+if "show_done_message" not in st.session_state:
+    st.session_state.show_done_message = False
+
 if "submission_complete" in st.session_state and st.session_state.submission_complete:
     st.subheader("✅ Submitted Successfully!")
     st.write("Your fuel entry has been recorded.")
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("📝 Submit Another Receipt", type="primary", width='stretch'):
+
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_left:
+        if st.button("📝 Submit Another Receipt", key="submit_another", type="primary", width='stretch'):
             st.session_state.submission_complete = False
+            st.session_state.show_done_message = False
             st.rerun()
-    
+
+    with col_right:
+        if st.button("Done", key="done_btn", width='stretch'):
+            st.session_state.show_done_message = True
+            st.rerun()
+
+    if st.session_state.show_done_message:
+        st.success("Thank you, attach the receipt in the file")
+
     st.stop()
 
 # --- Add Fuel Entry ---
@@ -135,9 +145,10 @@ st.header("Add Fuel Entry")
 col1, col2 = st.columns(2)
 
 with col1:
-    driver_name = st.text_input("Driver's Name [Full Name] *", key="driver_name")
-    if driver_name:
-        render_preview("Driver", driver_name)
+    driver_options = ["Select your name or driver's name..."] + drivers
+    driver_name = st.selectbox("Driver's Name *", driver_options, key="driver_name")
+    if not driver_name.startswith("Select"):
+        render_preview("Driver", driver_name, "success")
 
     date_value = st.date_input("Date of Receipt *", value=datetime.today().date(), key="date_value")
     render_preview("Date", date_value.strftime('%B %d, %Y'))
@@ -186,12 +197,12 @@ with col_btn2:
 if submit:
     errors = []
 
+    if driver_name.startswith("Select"):
+        errors.append("Please select your name.")
     if motor_vehicle.startswith("Select"):
         errors.append("Vehicle registration number is required.")
     if product == "Select product":
         errors.append("Please select a product type.")
-    if not driver_name:
-        errors.append("Driver name is required.")
     if not receipt_no:
         errors.append("Receipt number is required.")
     if current_km < previous_km:
@@ -206,48 +217,53 @@ if submit:
         @st.dialog("⚠️ Confirm Entry Details")
         def confirm_submission():
             st.write("Review before submitting:")
-            render_preview("Driver", driver_name)
-            render_preview("Date", date_value.strftime('%B %d, %Y'))
-            render_preview("Receipt No", receipt_no)
-            render_preview("Vehicle", motor_vehicle, "success")
-            render_preview("Product", product, "success")
-            render_preview("Quantity", f"{quantity} litres")
-            render_preview("Amount", f"{amount:,.2f}")
-            render_preview("Distance", f"{distance} km", "success")
+
+            confirm_data = {
+                "Driver": driver_name,
+                "Date": date_value.strftime('%B %d, %Y'),
+                "Receipt No": receipt_no,
+                "Vehicle": motor_vehicle,
+                "Product": product,
+                "Quantity": f"{quantity} litres",
+                "Amount": f"{amount:,.2f}",
+                "Distance": f"{distance} km",
+            }
+
+            # Display a compact table-like summary (vertical key/value pairs)
+            confirm_df = pd.DataFrame.from_dict(confirm_data, orient="index", columns=["Value"])
+            st.table(confirm_df)
 
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✓ Confirm & Submit", type="primary", width='stretch'):
+                if st.button("✓ Confirm & Submit", type="primary", key="confirm_submit"):
+                    # Insert into Supabase
+                    success = insert_fuel_entry(
+                        driver_name=driver_name,
+                        date=date_value.isoformat(),
+                        receipt_no=receipt_no,
+                        registration_no=motor_vehicle,
+                        product=product,
+                        quantity=quantity,
+                        amount=amount,
+                        previous_km=previous_km,
+                        current_km=current_km,
+                        distance=distance,
+                    )
 
-                    new_row = pd.DataFrame([{
-                        "Driver Name": driver_name,
-                        "Date": date_value.isoformat(),
-                        "Receipt No": receipt_no,
-                        "Registration No": motor_vehicle,
-                        "Product": product,
-                        "Quantity": quantity,
-                        "Amount": amount,
-                        "Previous Km": previous_km,
-                        "Current Km": current_km,
-                        "Distance": distance
-                    }])
-
-                    df = pd.read_csv(DATA_FILE)
-                    df = pd.concat([df, new_row], ignore_index=True)
-                    df.to_csv(DATA_FILE, index=False)
-
-                    st.session_state.submission_complete = True
-                    st.rerun()
+                    if success:
+                        st.session_state.submission_complete = True
+                        st.rerun()
+                    else:
+                        st.error("Failed to save entry. Please try again.")
 
             with col2:
-                if st.button("✗ Cancel", width='stretch'):
+                if st.button("✗ Cancel", key="confirm_cancel"):
                     st.rerun()
 
         confirm_submission()
 
 # --- Entries Viewer ---
-df = pd.read_csv(DATA_FILE)
-total_entries = len(df)
+total_entries = get_entry_count()
 
 st.header(f"Fuel Entries ({total_entries} total)")
 
@@ -263,10 +279,15 @@ with col_clear:
             st.rerun()
 
 if driver_filter:
-    filtered = df[df["Driver Name"].str.contains(driver_filter, case=False, na=False)]
-    st.caption(f"Showing {len(filtered)} of {total_entries} entries")
-    st.dataframe(filtered[display_columns].sort_values("Date", ascending=False),
-                 hide_index=True, width='stretch')
+    df = filter_entries_by_driver(driver_filter)
+    st.caption(f"Showing {len(df)} of {total_entries} entries")
+    if len(df) > 0:
+        st.dataframe(df[display_columns], hide_index=True, width='stretch')
+    else:
+        st.info("No entries found for this driver.")
 else:
-    st.dataframe(df[display_columns].sort_values("Date", ascending=False),
-                 hide_index=True, width='stretch')
+    df = get_all_fuel_entries()
+    if len(df) > 0:
+        st.dataframe(df[display_columns], hide_index=True, width='stretch')
+    else:
+        st.info("No fuel entries yet. Add your first entry above!")
