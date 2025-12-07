@@ -15,7 +15,7 @@ FONT_SIZE_TITLE = 50
 if not os.path.exists(DATA_FILE):
     df_init = pd.DataFrame(columns=[
         "Driver Name", "Date", "Receipt No", "Registration No", "Product", "Quantity", "Amount",
-        "Previous Km", "Current Km", "Distance", "Receipt Image"
+        "Previous Km", "Current Km", "Distance"
     ])
     df_init.to_csv(DATA_FILE, index=False)
 
@@ -178,10 +178,6 @@ with col2:
         else:
             render_preview("Distance", f"{current_km - previous_km} km", "success")
 
-    receipt_image = st.file_uploader("Upload Receipt Image", type=["png", "jpg", "jpeg", "pdf"], key="receipt_image")
-    if receipt_image:
-        render_preview("Receipt Image", receipt_image.name)
-
 
 col_btn1, col_btn2 = st.columns([3, 1])
 with col_btn2:
@@ -218,19 +214,10 @@ if submit:
             render_preview("Quantity", f"{quantity} litres")
             render_preview("Amount", f"{amount:,.2f}")
             render_preview("Distance", f"{distance} km", "success")
-            if receipt_image:
-                render_preview("Receipt Image", receipt_image.name)
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✓ Confirm & Submit", type="primary", width='stretch'):
-
-                    image_path = ""
-                    if receipt_image:
-                        os.makedirs("receipts", exist_ok=True)
-                        image_path = os.path.join("receipts", f"{receipt_no}_{receipt_image.name}")
-                        with open(image_path, "wb") as f:
-                            f.write(receipt_image.getbuffer())
 
                     new_row = pd.DataFrame([{
                         "Driver Name": driver_name,
@@ -242,8 +229,7 @@ if submit:
                         "Amount": amount,
                         "Previous Km": previous_km,
                         "Current Km": current_km,
-                        "Distance": distance,
-                        "Receipt Image": image_path
+                        "Distance": distance
                     }])
 
                     df = pd.read_csv(DATA_FILE)
