@@ -251,7 +251,8 @@ total_entries = len(df)
 
 st.header(f"Fuel Entries ({total_entries} total)")
 
-display_columns = ["Receipt No", "Registration No", "Driver Name", "Date"]
+display_columns = ["Date", "Driver Name", "Receipt No", "Registration No", "Product", 
+                   "Quantity", "Amount", "Previous Km", "Current Km", "Distance"]
 
 col_filter, col_clear = st.columns([4, 1])
 with col_filter:
