@@ -18,9 +18,9 @@ eggs/
 pip-wheel-metadata/
 
 # Virtual environments
-venv/
 ENV/
 env/
+venv/
 .venv/
 .pyenv/
 Pipfile.lock
@@ -58,3 +58,7 @@ fuel_register.csv
 .env.*
 app1.py
 .streamlit/secrets.toml
+
+# database files
+*.sqlite3
+*.sql

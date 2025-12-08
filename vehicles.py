@@ -16,7 +16,9 @@ registration_numbers = [
     "KBZ 182D",
     "KBZ 546D",
     "KCD 374G",
-    "KCD 390 G",
+    "KCD 390G",
+    "KCD 391G",
+    "KCD 388G",
     "KCH 905Q",
     "KCT846Y",
 ]

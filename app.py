@@ -161,7 +161,7 @@ with col1:
     if product != "Select product":
         render_preview("Product", product, "success")
 
-    quantity = st.number_input("Quantity (Litres)", min_value=0, key="quantity")
+    quantity = st.number_input("Quantity (Litres)", min_value=0.0, key="quantity")
     if quantity > 0:
         render_preview("Quantity", f"{quantity} litres")
 
@@ -171,7 +171,7 @@ with col2:
     if not motor_vehicle.startswith("Select"):
         render_preview("Vehicle", motor_vehicle, "success")
 
-    amount = st.number_input("Amount (Currency) *", min_value=0, key="amount")
+    amount = st.number_input("Amount (Currency) *", min_value=0.0, key="amount")
     if amount > 0:
         render_preview("Amount", f"{amount:,.2f}")
 
@@ -224,7 +224,7 @@ if submit:
                 "Receipt No": receipt_no,
                 "Vehicle": motor_vehicle,
                 "Product": product,
-                "Quantity": f"{quantity} litres",
+                "Quantity": f"{quantity:,.2f} litres",
                 "Amount": f"{amount:,.2f}",
                 "Distance": f"{distance} km",
             }
