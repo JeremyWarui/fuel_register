@@ -11,4 +11,6 @@ drivers = [
     "Richard Yoga",
     "Robert Thiga",
     "William Kabugi",
+    "Rodgers Maboi",
+    "Erick Mweresa"
 ]
