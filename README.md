@@ -28,7 +28,7 @@ All entries are stored persistently in **Supabase** (free cloud database) - data
 
 1. **Install dependencies**
    ```bash
-   pip install -r requirements.txt
+   uv sync
    ```
 
 2. **Configure Supabase** (see [SUPABASE_SETUP.md](SUPABASE_SETUP.md))
