@@ -1,39 +1,72 @@
 """
-Database configuration and operations for Fuel Register using Supabase.
+Database configuration and operations for Fuel Register using CockroachDB (Postgres-compatible).
 """
 import os
 import streamlit as st
-from supabase import create_client, Client
-from datetime import datetime
+import psycopg2
+from psycopg2 import OperationalError
+from psycopg2.extras import RealDictCursor
 import pandas as pd
 
-def get_supabase_client() -> Client:
+FUEL_ENTRIES_COLUMNS = [
+    "Driver Name", "Date", "Receipt No", "Registration No", "Product",
+    "Quantity", "Amount", "Previous Km", "Current Km", "Distance"
+]
+
+FUEL_ENTRIES_COLUMNS_DB_TO_DF = {
+    "driver_name": "Driver Name",
+    "date": "Date",
+    "receipt_no": "Receipt No",
+    "registration_no": "Registration No",
+    "product": "Product",
+    "quantity": "Quantity",
+    "amount": "Amount",
+    "previous_km": "Previous Km",
+    "current_km": "Current Km",
+    "distance": "Distance",
+}
+
+
+def get_database_url() -> str:
     """
-    Initialize and return Supabase client.
+    Retrieve CockroachDB connection string.
     Credentials should be stored in Streamlit secrets or environment variables.
     """
-    # Try to get from Streamlit secrets first (for cloud deployment)
     try:
-        supabase_url = st.secrets["SUPABASE_URL"]
-        supabase_key = st.secrets["SUPABASE_KEY"]
+        db_url = st.secrets["DATABASE_URL"]
     except (FileNotFoundError, KeyError):
-        # Fallback to environment variables (for local development)
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_KEY")
-        
-        if not supabase_url or not supabase_key:
-            st.error("⚠️ Supabase credentials not found. Please configure SUPABASE_URL and SUPABASE_KEY.")
-            st.stop()
-    
-    return create_client(supabase_url, supabase_key)
+        db_url = os.getenv("DATABASE_URL")
 
-def create_fuel_entries_table():
+        if not db_url:
+            st.error("⚠️ CockroachDB credentials not found. Please configure DATABASE_URL.")
+            st.stop()
+
+    return db_url
+
+
+def get_connection():
     """
-    SQL to create the fuel_entries table in Supabase.
-    Run this in your Supabase SQL editor:
-    
-    -- Create the fuel entries table
-    CREATE TABLE fuel_entries (
+    Get a new psycopg2 connection to CockroachDB.
+    Auto-creates the table on first successful connection.
+    """
+    db_url = get_database_url()
+    try:
+        conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+        conn.autocommit = False
+        _ensure_table_exists(conn)
+        return conn
+    except OperationalError as e:
+        st.error(f"⚠️ Could not connect to CockroachDB: {str(e)}")
+        raise
+
+
+def _ensure_table_exists(conn):
+    """
+    Create the fuel_entries table and indexes if they don't exist.
+    Runs once per connection.
+    """
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS fuel_entries (
         id BIGSERIAL PRIMARY KEY,
         driver_name TEXT NOT NULL,
         date DATE NOT NULL,
@@ -47,28 +80,32 @@ def create_fuel_entries_table():
         distance NUMERIC DEFAULT 0,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
-    
-    -- Create indexes for faster queries
-    CREATE INDEX idx_driver_name ON fuel_entries(driver_name);
-    CREATE INDEX idx_date ON fuel_entries(date DESC);
-    CREATE INDEX idx_registration_no ON fuel_entries(registration_no);
-    
-    -- IMPORTANT: Enable Row Level Security and allow public access (no authentication)
-    ALTER TABLE fuel_entries ENABLE ROW LEVEL SECURITY;
-    
-    -- Allow anonymous users to INSERT data
-    CREATE POLICY "Allow public insert" ON fuel_entries
-        FOR INSERT
-        TO anon
-        WITH CHECK (true);
-    
-    -- Allow anonymous users to SELECT (read) data
-    CREATE POLICY "Allow public select" ON fuel_entries
-        FOR SELECT
-        TO anon
-        USING (true);
     """
-    pass
+
+    idx1 = "CREATE INDEX IF NOT EXISTS idx_driver_name ON fuel_entries(driver_name);"
+    idx2 = "CREATE INDEX IF NOT EXISTS idx_date ON fuel_entries(date DESC);"
+    idx3 = "CREATE INDEX IF NOT EXISTS idx_registration_no ON fuel_entries(registration_no);"
+
+    with conn.cursor() as cur:
+        cur.execute(create_table_sql)
+        cur.execute(idx1)
+        cur.execute(idx2)
+        cur.execute(idx3)
+    conn.commit()
+
+
+def _rows_to_dataframe(rows) -> pd.DataFrame:
+    """Convert list of RealDict rows to a DataFrame with renamed columns."""
+    if not rows:
+        return pd.DataFrame(columns=FUEL_ENTRIES_COLUMNS)
+
+    df = pd.DataFrame([dict(r) for r in rows])
+
+    keep = [c for c in FUEL_ENTRIES_COLUMNS_DB_TO_DF.keys() if c in df.columns]
+    df = df[keep]
+    df = df.rename(columns=FUEL_ENTRIES_COLUMNS_DB_TO_DF)
+    return df
+
 
 def insert_fuel_entry(
     driver_name: str,
@@ -80,109 +117,95 @@ def insert_fuel_entry(
     amount: float,
     previous_km: float,
     current_km: float,
-    distance: float
+    distance: float,
 ) -> bool:
-    """Insert a new fuel entry into Supabase."""
+    """Insert a new fuel entry into CockroachDB."""
     try:
-        supabase = get_supabase_client()
-        
-        data = {
-            "driver_name": driver_name,
-            "date": date,
-            "receipt_no": receipt_no,
-            "registration_no": registration_no,
-            "product": product,
-            "quantity": quantity,
-            "amount": amount,
-            "previous_km": previous_km,
-            "current_km": current_km,
-            "distance": distance
-        }
-        
-        response = supabase.table("fuel_entries").insert(data).execute()
-        return True
+        conn = get_connection()
+        try:
+            insert_sql = """
+                INSERT INTO fuel_entries (
+                    driver_name, date, receipt_no, registration_no,
+                    product, quantity, amount, previous_km, current_km, distance
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            with conn.cursor() as cur:
+                cur.execute(
+                    insert_sql,
+                    (
+                        driver_name,
+                        date,
+                        receipt_no,
+                        registration_no,
+                        product,
+                        quantity,
+                        amount,
+                        previous_km,
+                        current_km,
+                        distance,
+                    ),
+                )
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
     except Exception as e:
         st.error(f"Error inserting entry: {str(e)}")
         return False
 
+
 def get_all_fuel_entries() -> pd.DataFrame:
-    """Retrieve all fuel entries from Supabase."""
+    """Retrieve all fuel entries from CockroachDB."""
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("fuel_entries").select("*").order("date", desc=True).execute()
-        
-        if response.data:
-            df = pd.DataFrame(response.data)
-            # Rename columns to match CSV format
-            df = df.rename(columns={
-                "driver_name": "Driver Name",
-                "date": "Date",
-                "receipt_no": "Receipt No",
-                "registration_no": "Registration No",
-                "product": "Product",
-                "quantity": "Quantity",
-                "amount": "Amount",
-                "previous_km": "Previous Km",
-                "current_km": "Current Km",
-                "distance": "Distance"
-            })
-            return df
-        else:
-            # Return empty DataFrame with proper columns
-            return pd.DataFrame(columns=[
-                "Driver Name", "Date", "Receipt No", "Registration No", "Product", 
-                "Quantity", "Amount", "Previous Km", "Current Km", "Distance"
-            ])
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM fuel_entries ORDER BY date DESC;"
+                )
+                rows = cur.fetchall()
+            return _rows_to_dataframe(rows)
+        finally:
+            conn.close()
     except Exception as e:
         st.error(f"Error retrieving entries: {str(e)}")
-        return pd.DataFrame(columns=[
-            "Driver Name", "Date", "Receipt No", "Registration No", "Product", 
-            "Quantity", "Amount", "Previous Km", "Current Km", "Distance"
-        ])
+        return pd.DataFrame(columns=FUEL_ENTRIES_COLUMNS)
+
 
 def filter_entries_by_driver(driver_name: str) -> pd.DataFrame:
-    """Filter fuel entries by driver name."""
+    """Filter fuel entries by driver name (case-insensitive contains match)."""
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("fuel_entries")\
-            .select("*")\
-            .ilike("driver_name", f"%{driver_name}%")\
-            .order("date", desc=True)\
-            .execute()
-        
-        if response.data:
-            df = pd.DataFrame(response.data)
-            df = df.rename(columns={
-                "driver_name": "Driver Name",
-                "date": "Date",
-                "receipt_no": "Receipt No",
-                "registration_no": "Registration No",
-                "product": "Product",
-                "quantity": "Quantity",
-                "amount": "Amount",
-                "previous_km": "Previous Km",
-                "current_km": "Current Km",
-                "distance": "Distance"
-            })
-            return df
-        else:
-            return pd.DataFrame(columns=[
-                "Driver Name", "Date", "Receipt No", "Registration No", "Product", 
-                "Quantity", "Amount", "Previous Km", "Current Km", "Distance"
-            ])
+        conn = get_connection()
+        try:
+            pattern = f"%{driver_name}%"
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM fuel_entries WHERE driver_name ILIKE %s ORDER BY date DESC;",
+                    (pattern,),
+                )
+                rows = cur.fetchall()
+            return _rows_to_dataframe(rows)
+        finally:
+            conn.close()
     except Exception as e:
         st.error(f"Error filtering entries: {str(e)}")
-        return pd.DataFrame(columns=[
-            "Driver Name", "Date", "Receipt No", "Registration No", "Product", 
-            "Quantity", "Amount", "Previous Km", "Current Km", "Distance"
-        ])
+        return pd.DataFrame(columns=FUEL_ENTRIES_COLUMNS)
+
 
 def get_entry_count() -> int:
     """Get total count of fuel entries."""
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("fuel_entries").select("id", count="exact").execute()
-        return response.count if response.count else 0
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) AS cnt FROM fuel_entries;")
+                row = cur.fetchone()
+                return int(row["cnt"]) if row and row["cnt"] is not None else 0
+        finally:
+            conn.close()
     except Exception as e:
         st.error(f"Error getting entry count: {str(e)}")
         return 0
