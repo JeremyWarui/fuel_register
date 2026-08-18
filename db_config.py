@@ -2,6 +2,9 @@
 Database configuration and operations for Fuel Register using CockroachDB (Postgres-compatible).
 """
 import os
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+import certifi
 import streamlit as st
 import psycopg2
 from psycopg2 import OperationalError
@@ -27,6 +30,29 @@ FUEL_ENTRIES_COLUMNS_DB_TO_DF = {
 }
 
 
+def _normalize_ssl_params(db_url: str) -> str:
+    """
+    Make the connection string portable across hosts.
+
+    CockroachDB Cloud hands out URLs with ``sslmode=verify-full`` and no
+    ``sslrootcert``. libpq then falls back to ``~/.postgresql/root.crt``, which
+    does not exist on Streamlit Cloud. Cockroach Cloud certificates chain to
+    Let's Encrypt, so certifi's CA bundle verifies them. We point at certifi
+    rather than ``sslrootcert=system`` because psycopg2-binary ships its own
+    statically linked OpenSSL whose built-in CA directory is not present on
+    most hosts.
+    """
+    parts = urlsplit(db_url)
+    params = dict(parse_qsl(parts.query, keep_blank_values=True))
+
+    if params.get("sslmode") in (None, "", "verify-full", "verify-ca"):
+        params.setdefault("sslmode", "verify-full")
+        if not params.get("sslrootcert"):
+            params["sslrootcert"] = certifi.where()
+
+    return urlunsplit(parts._replace(query=urlencode(params)))
+
+
 def get_database_url() -> str:
     """
     Retrieve CockroachDB connection string.
@@ -41,7 +67,7 @@ def get_database_url() -> str:
             st.error("⚠️ CockroachDB credentials not found. Please configure DATABASE_URL.")
             st.stop()
 
-    return db_url
+    return _normalize_ssl_params(db_url)
 
 
 def get_connection():
